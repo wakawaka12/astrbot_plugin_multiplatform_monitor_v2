@@ -3,6 +3,7 @@
 ![MIT](https://img.shields.io/badge/license-MIT-blue)
 ![Python](https://img.shields.io/badge/Python-3.10+-blue)
 ![AstrBot](https://img.shields.io/badge/AstrBot-%3E%3D4.24.2-purple)
+[![Repo](https://img.shields.io/badge/GitHub-wakawaka12%2Fastrbot__plugin__multiplatform__monitor__v2-181717?logo=github)](https://github.com/wakawaka12/astrbot_plugin_multiplatform_monitor_v2)
 
 面向 **AstrBot** 的 QQ 机器人插件：监控 Steam / PSN / Xbox 玩家状态，推送上下线与进出游戏；并提供 **查价、愿望单折扣、排行榜、新购游戏通知** 与本地资料库。
 

@@ -2,11 +2,12 @@ name: steam_status_monitor_V3
 display_name: 全平台游戏监控（Steam/PSN/Xbox）
 desc: 全平台游戏状态监控与查价/愿望单折扣：Steam/PSN/Xbox 上下线推送、多区查价+本地 DLC 摘要、愿望单 ITAD 折扣推送等。基于 Maoer233/astrbot_plugin_steam_status_monitor v4.5.5 二次开发。
 author: Maoer & contributors
-repo: https://github.com/Maoer233/astrbot_plugin_steam_status_monitor
+repo: https://github.com/wakawaka12/astrbot_plugin_multiplatform_monitor_v2
+upstream_repo: https://github.com/Maoer233/astrbot_plugin_steam_status_monitor
 version: 4.5.5-mp2
 astrbot_version: ">=4.24.2"
 tags:
   - steam
   - psn
   - xbox
-social_link: https://github.com/Maoer233
+social_link: https://github.com/wakawaka12
