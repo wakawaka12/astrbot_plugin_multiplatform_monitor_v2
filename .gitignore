@@ -1,0 +1,25 @@
+__pycache__/
+venv/
+.vscode/
+.github/
+.git-rewrite/
+*.lnk
+test_line.txt
+/data/steam_status_monitor/
+/docs/
+
+# 本地密钥与运行数据（勿提交）
+config.local.json
+*_config.json
+secrets.*
+local_store.db
+*.db
+_test_data/
+_test_*.png
+*.bak
+*.bak_split
+
+# 运行时下载的 CJK 字体（商店包 / Git 不跟踪）
+assets/fonts/*.otf
+assets/fonts/*.ttf
+assets/fonts/*.ttc

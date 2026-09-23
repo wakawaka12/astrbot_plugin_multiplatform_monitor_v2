@@ -1,0 +1,456 @@
+{
+  "psn_npsso": {
+    "description": "PSN npsso 码",
+    "type": "string",
+    "hint": "可选项-启用 PSN 监控：登录 my.playstation.com 后访问 https://ca.account.sony.com/api/v1/ssocookie 获取，约2个月有效",
+    "default": ""
+  },
+  "xbox_client_id": {
+    "description": "Xbox Azure AD client_id",
+    "type": "string",
+    "hint": "可选项-启用 Xbox 监控：一般留空（默认 Xbox App 公共客户端）；自建 Azure AD 应用时填写",
+    "default": ""
+  },
+  "xbox_client_secret": {
+    "description": "Xbox Azure AD client_secret",
+    "type": "string",
+    "hint": "可选项-Xbox 监控：仅自建 Azure AD 机密客户端时填写",
+    "default": ""
+  },
+  "xbox_tokens_file": {
+    "description": "Xbox tokens.json 路径",
+    "type": "string",
+    "hint": "可选项-启用 Xbox 监控：本机 pip install xbox-webapi 后运行 xbox-authenticate 生成 tokens.json，拷到服务器；留空则找插件数据目录/xbox_tokens.json",
+    "default": ""
+  },
+  "nso_http_base": {
+    "description": "NSO nxapi HTTP 服务地址",
+    "type": "string",
+    "hint": "可选项-启用 Nintendo 监控：nxapi 服务地址（如 http://127.0.0.1:5333）",
+    "default": ""
+  },
+  "steam_api_key": {
+    "description": "Steam Web API Key",
+    "type": "string",
+    "hint": "必填项-请在 https://steamcommunity.com/dev/apikey 获取 "
+  },
+  "sgdb_api_key": {
+    "description": "SteamGridDB API Key",
+    "type": "string",
+    "hint": "必填项-请在 https://www.steamgriddb.com/profile/preferences/api 获取"
+  },
+  "itad_api_key": {
+    "description": "IsThereAnyDeal API Key",
+    "type": "string",
+    "hint": "可选项-用于游戏搜索、当前价格和历史最低价查询；请在 https://isthereanydeal.com/apps/ 获取获取",
+    "default": ""
+  },
+  "itad_api_base": {
+    "description": "ITAD API 地址",
+    "type": "string",
+    "hint": "通常留空使用官方 API 地址",
+    "default": ""
+  },
+  "price_region": {
+    "description": "价格查询地区代码",
+    "type": "string",
+    "hint": "选择用于查询价格的 Steam 区",
+    "options": ["CN", "US", "JP", "KR", "RU", "UA", "TR", "HK"],
+    "default": "CN"
+  },
+  "price_compare_regions": {
+    "description": "价格对比地区（支持逗号分隔多区，各自独立取价）",
+    "type": "string",
+    "hint": "逗号分隔多个区，如 IN,UA,PK（印度/乌克兰/南亚/国区）；NONE 关闭对比",
+    "default": "IN,UA,PK"
+  },
+  "fixed_poll_interval": {
+    "description": "固定轮询间隔（秒）-修改后重启AstrBot生效",
+    "type": "int",
+    "hint": "为0时使用智能轮询，大于0时所有玩家统一固定间隔轮询（如600秒）",
+    "default": 0
+  },
+  "smart_poll_intervals": {
+    "description": "智能轮询各状态间隔（分钟）-修改后重启AstrBot生效",
+    "type": "string",
+    "hint": "用逗号分隔，依次为[游戏中,12分钟内,3小时内,24小时内,48小时内,超过48小时]，如 1,3,5,10,20,30",
+    "default": "1,3,5,10,20,30"
+  },
+  "retry_times": {
+    "description": "Steam API请求重试次数 -修改后重启AstrBot生效",
+    "type": "int",
+    "hint": "每次请求失败后最多重试几次 ",
+    "default": 3
+  },
+  "max_group_size": {
+    "description": "单群最大监控人数 -修改后重启AstrBot生效",
+    "type": "int",
+    "hint": "单个群聊最多监控的Steam账号数量，建议≤100，过大易触发Steam限流",
+    "default": 20
+  },
+  "detailed_poll_log": {
+    "description": "详细轮询日志开关",
+    "type": "bool",
+    "hint": "控制台输出完整轮询日志（修改后重启AstrBot生效）",
+    "default": true
+  },
+  "enable_achievement_poll": {
+    "description": "成就轮询推送开关",
+    "type": "bool",
+    "hint": "开启后玩家游戏过程中解锁成就会推送通知，关闭则完全不轮询成就（修改后重启AstrBot生效）",
+    "default": true
+  },
+  "enable_steam_style": {
+    "description": "Steam列表渲染风格开关",
+    "type": "bool",
+    "hint": "开启后 /steam list、/steamwho、/steam alllist 等列表图片使用新版steam风格；关闭则使用 V3.3.3 原卡片风格（含封面/群号/SteamID/下次轮询）。默认关闭（修改后重启AstrBot生效）",
+    "default": false
+  },
+  "enable_game_start_notify": {
+    "description": "游戏开始通知开关",
+    "type": "bool",
+    "hint": "关闭后仅在后台跟踪时长，不发送开始游戏通知（修改后重启AstrBot生效）",
+    "default": true
+  },
+  "enable_game_end_notify": {
+    "description": "游戏结束通知开关",
+    "type": "bool",
+    "hint": "开启后玩家退出游戏会推送结束通知（含游玩时长），关闭则只推送开始游戏（修改后重启AstrBot生效）",
+    "default": true
+  },
+  "enable_network_fluctuation_notify": {
+    "description": "网络波动通知开关",
+    "type": "bool",
+    "hint": "开启后当检测到网络波动时发送纯文本提醒，关闭则不发送（修改后重启AstrBot生效）",
+    "default": true
+  },
+  "notify_send_image": {
+    "description": "通知发送图片开关",
+    "type": "bool",
+    "hint": "勾选则发送开始游玩、游戏结束、成就等图片；可与发送文本同时勾选（修改后重启AstrBot生效）",
+    "default": true
+  },
+  "notify_send_text": {
+    "description": "通知发送文本开关",
+    "type": "bool",
+    "hint": "勾选则发送文字说明；可与发送图片同时勾选，两项都勾选=图文一起发（修改后重启AstrBot生效）",
+    "default": true
+  },
+  "enable_proxy": {
+    "description": "启用网络代理",
+    "type": "bool",
+    "hint": "开启后插件所有网络请求将走设定的代理（http/https/socks5），修改后重启AstrBot生效",
+    "default": false
+  },
+  "proxy_url": {
+    "description": "代理链接",
+    "type": "string",
+    "hint": "填写代理IP和端口，如：http://127.0.0.1:7890 或 socks5://127.0.0.1:7890",
+    "default": ""
+  },
+  "font_download_enabled": {
+    "description": "启动后自动下载 CJK 字体包",
+    "type": "bool",
+    "hint": "商店包不含字体。开启后插件会在后台优先经国内镜像下载 fonts-bundle，失败再回退 GitHub；关闭则仅使用本地已缓存或系统字体（修改后重启AstrBot生效）",
+    "default": true
+  },
+  "font_pack_url": {
+    "description": "自定义字体包下载地址",
+    "type": "string",
+    "hint": "留空则按 GitHub Release 走国内镜像并回退官方地址。填写后只使用该 https 地址，仍按清单 SHA256 校验（修改后重启AstrBot生效）",
+    "default": ""
+  },
+  "font_download_timeout_sec": {
+    "description": "字体包下载超时（秒）",
+    "type": "int",
+    "hint": "单个下载源的读取超时，默认 600 秒（10 分钟）。连接超时固定约 15 秒以便快速换源（修改后重启AstrBot生效）",
+    "default": 600
+  },
+  "steam_api_base": {
+    "description": "Steam Web API 代理地址",
+    "type": "string",
+    "hint": "可填写反向代理地址，例如 https://steam-api.4oi.site；留空使用官方地址",
+    "default": ""
+  },
+  "steam_store_base": {
+    "description": "Steam 商店代理地址",
+    "type": "string",
+    "hint": "可填写反向代理地址，例如 https://steam-store.4oi.site；留空使用官方地址",
+    "default": ""
+  },
+  "sgdb_api_base": {
+    "description": "SteamGridDB 代理地址",
+    "type": "string",
+    "hint": "可填写反向代理地址，例如 https://steamgriddb.4oi.site；留空使用官方地址",
+    "default": ""
+  },
+  "qq_official_enabled": {
+    "description": "启用后台 QQ 官方机器人配置",
+    "type": "bool",
+    "hint": "控制插件后台保存的 QQ 官方机器人参数是否启用；修改后建议重载插件。",
+    "default": false
+  },
+  "qq_official_appid": {
+    "description": "QQ 官方机器人 AppID",
+    "type": "string",
+    "hint": "从 QQ 开放平台机器人开发设置中获取，仅允许 5 至 20 位数字。",
+    "default": ""
+  },
+  "qq_official_secret": {
+    "description": "QQ 官方机器人密钥",
+    "type": "string",
+    "hint": "从 QQ 开放平台获取，请勿泄露。后台管理页读取时会自动脱敏。",
+    "default": ""
+  },
+  "qq_official_callback_url": {
+    "description": "QQ 官方机器人回调地址",
+    "type": "string",
+    "hint": "完整的 HTTP/HTTPS URL；仅 Webhook 接入方式需要填写。",
+    "default": ""
+  },
+  "qq_official_message_format": {
+    "description": "QQ 官方机器人消息格式",
+    "type": "string",
+    "options": ["plain", "markdown"],
+    "hint": "plain 为纯文本，markdown 为 Markdown 消息。",
+    "default": "plain"
+  },
+  "qq_menu_enabled": {
+    "description": "启用 QQ 官方机器人指令面板",
+    "type": "bool",
+    "hint": "仅支持 AstrBot 的 qq_official 与 qq_official_webhook 平台；启用后由管理员执行 /steam qq菜单同步",
+    "default": false
+  },
+  "qq_menu_scope": {
+    "description": "QQ 指令面板场景",
+    "type": "string",
+    "options": ["group", "c2c"],
+    "hint": "group 为群聊，c2c 为单聊；修改场景后请先删除旧面板再同步",
+    "default": "group"
+  },
+  "qq_menu_group_openids": {
+    "description": "QQ 指令面板群 OpenID",
+    "type": "list",
+    "items": {"type": "string"},
+    "hint": "群聊面板必填，填写 QQ 开放平台中的群 OpenID，可配置多个群",
+    "default": []
+  },
+  "qq_menu_commands": {
+    "description": "QQ 指令面板展示项",
+    "type": "list",
+    "items": {"type": "object"},
+    "hint": "由插件后台页面维护，控制指令名称、说明与显示顺序",
+    "default": [
+      {"command": "/steam help", "description": "查看 Steam 插件指令帮助"},
+      {"command": "/steam list", "description": "查看本群玩家当前状态"},
+      {"command": "/steam rank", "description": "查看本群今日时长排行"},
+      {"command": "/steam rank 7", "description": "查看本群最近七天排行"},
+      {"command": "/steam rank 30", "description": "查看本群最近三十天排行"}
+    ]
+  },
+  "qq_menu_panel_id": {
+    "description": "QQ 指令面板 ID",
+    "type": "string",
+    "hint": "同步成功后由插件自动保存，请勿手动修改",
+    "default": ""
+  },
+  "ssl_ca_file": {
+    "description": "自定义 CA 证书文件",
+    "type": "string",
+    "hint": "填写宿主环境内 PEM 格式 CA 文件的绝对路径；留空使用系统默认信任链，请勿关闭 TLS 校验",
+    "default": ""
+  },
+  "cache_avatar_hours": {
+    "description": "头像缓存时间（小时）-修改后重启AstrBot生效",
+    "type": "int",
+    "hint": "0=永不过期，默认24小时（1天）",
+    "default": 24
+  },
+  "cache_avatar_frame_hours": {
+    "description": "头像框图片缓存时间（小时）-修改后重启AstrBot生效",
+    "type": "int",
+    "hint": "优先用本地缓存，过期才去社区抓取（支持代理），0=永不过期，默认720小时（30天）",
+    "default": 720
+  },
+  "cache_cover_vertical_hours": {
+    "description": "SGDB竖版封面缓存时间（小时）-修改后重启AstrBot生效",
+    "type": "int",
+    "hint": "0=永不过期，默认0",
+    "default": 0
+  },
+  "cache_cover_horizontal_hours": {
+    "description": "横版封面缓存时间（小时）-修改后重启AstrBot生效",
+    "type": "int",
+    "hint": "0=永不过期，默认0",
+    "default": 0
+  },
+  "game_filter_mode": {
+    "description": "游戏过滤模式 -修改后重启AstrBot生效",
+    "type": "string",
+    "hint": "全部游戏=监控所有；白名单=仅播报列表中的游戏；黑名单=列表中的游戏不播报",
+    "default": "全部游戏",
+    "enum": ["全部游戏", "白名单", "黑名单"]
+  },
+  "game_filter_ids": {
+    "description": "过滤游戏ID列表 -修改后重启AstrBot生效",
+    "type": "string",
+    "hint": "逗号分隔 gameid，如 4315770,431960",
+    "default": ""
+  },
+  "rank_push_hour": {
+    "description": "每日排行榜推送时间-小时（24小时制）-修改后重启AstrBot生效",
+    "type": "int",
+    "hint": "每日自动推送排行榜的小时数，默认8（即8:30推送）",
+    "default": 8
+  },
+  "rank_push_minute": {
+    "description": "每日排行榜推送时间-分钟 -修改后重启AstrBot生效",
+    "type": "int",
+    "hint": "每日自动推送排行榜的分钟数，默认30（即8:30推送）",
+    "default": 30
+  },
+  "wish_sale_interval_hours": {
+    "description": "愿望单打折完整周期参考（小时）",
+    "type": "int",
+    "hint": "愿望单 SSR 缓存与主周期参考；实际子轮见 wish_sale_round_interval_hours",
+    "default": 8
+  },
+  "wish_sale_country": {
+    "description": "愿望单折扣查询区服",
+    "type": "string",
+    "hint": "Steam cc 参数，如 CN / US / HK，默认 CN",
+    "default": "CN"
+  },
+  "wish_sale_min_cut": {
+    "description": "愿望单折扣推送门槛（%）",
+    "type": "int",
+    "hint": "折扣百分比达到该值才推送，默认10",
+    "default": 10
+  },
+  "wish_sale_max_games": {
+    "description": "愿望单缓存保留条数上限",
+    "type": "int",
+    "hint": "0=缓存尽量保留全量，折扣扫描由多轮游标续扫；>0 则按优先级截断目录",
+    "default": 0
+  },
+  "wish_sale_round_limit": {
+    "description": "每轮每人折扣扫描条数",
+    "type": "int",
+    "hint": "折扣扫描时每个 SID 每轮最多查多少 appid，默认50",
+    "default": 50
+  },
+  "wish_sale_round_interval_hours": {
+    "description": "折扣检查子轮间隔（小时）",
+    "type": "int",
+    "hint": "后台对本地愿望单缓存查折扣的间隔；建议2",
+    "default": 2
+  },
+  "wish_sale_cache_ttl_hours": {
+    "description": "愿望单缓存参考 TTL（小时）",
+    "type": "int",
+    "hint": "仅自动拉取模式用于判断是否过期；手动模式不自动 SSR",
+    "default": 24
+  },
+  "wish_sale_auto_pull_wishlist": {
+    "description": "是否后台自动拉愿望单列表",
+    "type": "bool",
+    "hint": "false=手动 /game wish_sale update（推荐，避免每天 SSR 全员）",
+    "default": false
+  },
+  "wish_sale_auto_discount": {
+    "description": "是否后台自动查愿望单折扣",
+    "type": "bool",
+    "hint": "true=按本地缓存+小时限额自动扫；false=只手动 check",
+    "default": true
+  },
+  "wish_sale_hourly_limit": {
+    "description": "愿望单折扣·后台每小时商店查询上限",
+    "type": "int",
+    "hint": "全群合计 appdetails 次数/小时（后台自动扫缓存用），默认400",
+    "default": 400
+  },
+  "wish_sale_manual_limit": {
+    "description": "单人手动查折扣候选上限",
+    "type": "int",
+    "hint": "check/update @某人 时本地缓存进入候选的上限；有截止时间的会先跳过，实查往往远小于此",
+    "default": 400
+  },
+  "wish_sale_recheck_hours": {
+    "description": "无折扣条目复查间隔（小时）",
+    "type": "int",
+    "hint": "上次查过且无折扣，该时间内不再查同一 appid",
+    "default": 24
+  },
+  "wish_sale_skip_before_end_hours": {
+    "description": "折扣截止前多久可重查（小时）",
+    "type": "int",
+    "hint": "有折扣且 end_ts 仍在未来+该缓冲内则跳过",
+    "default": 2
+  },
+  "wish_sale_daily_check_hour": {
+    "description": "每日无折扣复查·小时（0-23）",
+    "type": "int",
+    "hint": "白天可选；主力改为凌晨夜间任务时可设 -1 关闭",
+    "default": -1
+  },
+  "wish_sale_night_hour": {
+    "description": "愿望单夜间任务小时（0-23）",
+    "type": "int",
+    "hint": "凌晨自动：拉列表+ITAD扫折扣+限量商店补截止，结果入队；-1=关闭",
+    "default": 1
+  },
+  "wish_sale_notify_hour": {
+    "description": "愿望单折扣白天通知小时（0-23）",
+    "type": "int",
+    "hint": "夜间只写本地/入队，到该时刻后统一合并推送（@绑定）。默认9；-1=夜间查完立刻推",
+    "default": 9
+  },
+  "enable_owned_games_notify": {
+    "description": "新购游戏通知",
+    "type": "bool",
+    "hint": "每小时对比已购库，有新购则推送；首次快照只记录不推送",
+    "default": true
+  },
+  "wish_sale_night_store_limit": {
+    "description": "夜间任务商店请求上限",
+    "type": "int",
+    "hint": "仅用于愿望单SSR分页+折扣截止确认；与查价/状态分离",
+    "default": 60
+  },
+  "wish_sale_itad_sleep": {
+    "description": "ITAD 查询间隔（秒）",
+    "type": "float",
+    "hint": "愿望单用 ITAD 判折扣时的间隔，默认0.35",
+    "default": 0.35
+  },
+  "wish_sale_auto_pull_wishlist": {
+    "description": "是否夜间自动拉愿望单列表",
+    "type": "bool",
+    "hint": "true=每天凌晨按 night_hour SSR 拉列表；白天不拉",
+    "default": true
+  },
+  "wish_sale_auto_discount": {
+    "description": "白天是否后台扫商店折扣",
+    "type": "bool",
+    "hint": "主力在夜间ITAD；白天建议 false，需要时用 check @某人（ITAD）",
+    "default": false
+  },
+  "wish_sale_ban_cooldown_min": {
+    "description": "愿望单403冷却时间（分钟）",
+    "type": "int",
+    "hint": "连续被 Steam 403 后暂停愿望单请求的时长，默认45分钟",
+    "default": 45
+  },
+  "perfect_scan_concurrency": {
+    "description": "全成就全库扫描并发数",
+    "type": "int",
+    "hint": "GetPlayerAchievements 并发，默认10；建议6-16，过高可能被Steam限流",
+    "default": 10
+  },
+  "price_search_cache_sec": {
+    "description": "查价候选序号有效期（秒）",
+    "type": "int",
+    "hint": "出现候选列表后，回复序号的有效时间，默认180秒=3分钟",
+    "default": 180
+  }
+}
