@@ -400,56 +400,10 @@ class GamePriceServiceMixin:
                 return translated
         except asyncio.TimeoutError:
             logger.warning("LLM 翻译游戏名超时（12s），尝试中转站: %s", query)
-            return await self._translate_via_agentrouter(query) or query
+            return query
         except Exception as exc:
             logger.warning("LLM 翻译游戏名失败，尝试中转站: %s", exc)
-            return await self._translate_via_agentrouter(query) or query
-
-    async def _translate_via_agentrouter(self, query: str) -> str:
-        """备用翻译通道：直接调用中转站，不经过 AstrBot provider 层。
-
-        端点与密钥一律从插件配置读取（translate_api_base / translate_api_key）。
-        2026-10-09 修复：历史版本把中转站地址与密钥硬编码在源码里，
-        并随公开仓库一起发布了出去，现改为配置化。
-        """
-        _base = str(self.config.get("translate_api_base") or "").strip().rstrip("/")
-        _api_key = str(self.config.get("translate_api_key") or "").strip()
-        if not _base or not _api_key:
-            logger.debug("[翻译] 未配置 translate_api_base / translate_api_key，跳过中转站翻译")
-            return ""
-        try:
-            import httpx as _httpx  # noqa: F401  # 保留兼容旧引用
-            prompt = (
-                "请将以下游戏名翻译为 Steam 商店使用的英文官方名称，"
-                f"仅输出英文名，不要输出其他内容：{query}"
-            )
-            async with shared_httpx_client(
-                proxy=getattr(self, 'proxy', None), timeout=15.0, follow_redirects=False
-            ) as client:
-                r = await client.post(
-                    f"{_base}/v1/chat/completions",
-                    headers={"Authorization": f"Bearer {_api_key}"},
-                    json={
-                        "model": "deepseek-v4-flash",
-                        "messages": [{"role": "user", "content": prompt}],
-                        "max_tokens": 60,
-                    },
-                )
-                if r.status_code != 200:
-                    return ""
-                data = r.json()
-                content = ((data.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
-                content = content.strip().strip('`\"“”')
-                if content:
-                    self._translate_cache[query] = content
-                    logger.info("[LLM][中转站翻译] %s -> %s", query, content)
-                    return content
-        except Exception as e:
-            logger.warning("中转站翻译失败: %s", e)
-        return ""
-
-    def _has_cjk_text(self, s: str) -> bool:
-        return any("一" <= ch <= "鿿" for ch in str(s or ""))
+            return query
 
     async def _format_game_search_item(self, game):
         """返回候选展示名 + DLC/版本标签。

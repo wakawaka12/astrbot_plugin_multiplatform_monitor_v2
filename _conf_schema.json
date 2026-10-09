@@ -193,16 +193,6 @@
     "hint": "可填写反向代理地址，例如 https://steamgriddb.4oi.site；留空使用官方地址",
     "default": ""
   },
-  "translate_api_base": {
-    "description": "游戏名翻译中转站地址（可选；留空则跳过中转站翻译，仅用 AstrBot provider）",
-    "type": "string",
-    "default": ""
-  },
-  "translate_api_key": {
-    "description": "游戏名翻译中转站密钥（可选；与会话密钥分开存放，切勿硬编码进源码）",
-    "type": "string",
-    "default": ""
-  },
   "qq_official_enabled": {
     "description": "启用后台 QQ 官方机器人配置",
     "type": "bool",
