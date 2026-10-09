@@ -10,7 +10,7 @@ import os
 import re
 import time
 import traceback
-from datetime import date
+from datetime import date, datetime
 
 from astrbot.api.event import AstrMessageEvent, MessageChain, filter
 from astrbot.api.message_components import Image, Plain
@@ -166,7 +166,7 @@ class GamePriceServiceMixin:
         return sorted(games, key=_key)
 
     async def _game_price_impl(self, event: AstrMessageEvent, query: str):
-        async for r in self.steam_price(event, query):
+        async for r in self._steam_price_cmd_impl(event, query):
             yield r
 
     async def _price_short_impl(self, event: AstrMessageEvent, query: str = ""):
@@ -174,7 +174,7 @@ class GamePriceServiceMixin:
         if not query or not query.strip():
             yield event.plain_result("用法：/price <游戏名或Steam链接>\n例：/price 艾尔登法环")
             return
-        async for r in self.steam_price(event, query):
+        async for r in self._steam_price_cmd_impl(event, query):
             yield r
 
     async def _px_short_impl(self, event: AstrMessageEvent, query: str = ""):
@@ -182,7 +182,7 @@ class GamePriceServiceMixin:
         if not query or not query.strip():
             yield event.plain_result("用法：/px <游戏名>\n例：/px 黑神话：悟空")
             return
-        async for r in self.steam_px(event, query):
+        async for r in self._steam_px_impl(event, query):
             yield r
 
     @staticmethod
@@ -406,7 +406,17 @@ class GamePriceServiceMixin:
             return await self._translate_via_agentrouter(query) or query
 
     async def _translate_via_agentrouter(self, query: str) -> str:
-        """备用翻译通道：直接调用本地中转站（agentrouter），不经过 AstrBot provider 层。"""
+        """备用翻译通道：直接调用中转站，不经过 AstrBot provider 层。
+
+        端点与密钥一律从插件配置读取（translate_api_base / translate_api_key）。
+        2026-10-09 修复：历史版本把中转站地址与密钥硬编码在源码里，
+        并随公开仓库一起发布了出去，现改为配置化。
+        """
+        _base = str(self.config.get("translate_api_base") or "").strip().rstrip("/")
+        _api_key = str(self.config.get("translate_api_key") or "").strip()
+        if not _base or not _api_key:
+            logger.debug("[翻译] 未配置 translate_api_base / translate_api_key，跳过中转站翻译")
+            return ""
         try:
             import httpx as _httpx  # noqa: F401  # 保留兼容旧引用
             prompt = (
@@ -417,8 +427,8 @@ class GamePriceServiceMixin:
                 proxy=getattr(self, 'proxy', None), timeout=15.0, follow_redirects=False
             ) as client:
                 r = await client.post(
-                    "http://example.invalid:3000/v1/chat/completions",
-                    headers={"Authorization": "Bearer REMOVED_LEAKED_CREDENTIAL"},
+                    f"{_base}/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {_api_key}"},
                     json={
                         "model": "deepseek-v4-flash",
                         "messages": [{"role": "user", "content": prompt}],
@@ -916,6 +926,10 @@ class GamePriceServiceMixin:
                 else:
                     store_price = await _store_price(game.appid, region)
                     itad = await _itad_summary(getattr(game, "id", "") or "", region)
+                    # ITAD 对乌克兰/巴基斯坦/俄罗斯无本地覆盖，会回退返回美国区 USD，
+                    # 与当地币种不可比（实测出现"当前 524 UAH / 史低 2.99 USD"）→ 抑制史低，显示暂无
+                    if str(region).upper() in ("UA", "PK", "RU"):
+                        itad = None
                     if not compact:
                         await asyncio.sleep(0.8)
                 cur = (store_price or {}).get("currency") or (itad or {}).get("currency")
@@ -1704,12 +1718,21 @@ class GamePriceServiceMixin:
             yield event.plain_result(f"（候选仍有效，共 {total} 项，可继续回复序号，如 2 或 3）")
         return
 
-    async def _steam_lookup_impl(self, event: AstrMessageEvent, query: str = ""):
+    async def _steam_lookup_impl(self, event: AstrMessageEvent, query: str = "", target: str = ""):
         '''一站式查询：/steam <游戏名>（多区价格+史低+简介+链接）'''
         logger.info(f"[lookup] steam 泛化指令命中 query={query!r}")
         # 子指令勿当游戏名查价（AstrBot 可能同时命中 /steam 与 /steam xxx）
         _q = (query or "").strip()
         _head = _q.split()[0].lower() if _q else ""
+        # /steam who @某人 -> 等价 /steamwho @某人（否则会被当成游戏名查价）
+        if _head in ("who", "steamwho", "在干嘛"):
+            tgt = (target or "").strip()
+            if not tgt:
+                yield event.plain_result("用法：/steam who @某人（等价于 /steamwho @某人）")
+                return
+            async for _r in self.steam_who(event, tgt):
+                yield _r
+            return
         if _head in {
             "help", "menu", "?", "price", "px", "list", "alllist", "config", "set",
             "addid", "delid", "on", "off", "rs", "rank", "allrank", "rank_on",
@@ -1717,6 +1740,8 @@ class GamePriceServiceMixin:
             "achievement_on", "achievement_off", "test_achievement_render",
             "test_game_start_render", "test_game_end_render", "sim_psn", "sim_xbox",
             "test_xbox_ach", "xbox", "clear_allids", "clear_groupids", "清除缓存",
+            "test_perfect", "pr", "test_achievement_render", "test_game_start_render",
+            "test_game_end_render", "sim_psn", "sim_xbox",
             "push_group", "delpush_group", "game",
             # 状态/绑定/排行等子指令，禁止被当成游戏名
             "net", "netstatus", "status", "netstat", "bind", "remark", "doc",
@@ -1726,15 +1751,21 @@ class GamePriceServiceMixin:
             return
         if not _q or _head in ("help", "menu", "?"):
             yield event.plain_result(
-                "用法：\n"
-                "/steam <游戏名> —— 一站式查价（价格+史低+简介+链接）\n"
-                "/steam price <游戏名> —— 多候选序号选择\n"
-                "/steam px <游戏名> —— 快捷版（直接第一条）\n"
-                "/steam status —— 接口连通状态（也可直接发 /status）"
+                "查价用法：\n"
+                "/price <游戏名> —— 多候选序号选择\n"
+                "/px <游戏名> —— 快捷版（直接返回第一条）\n"
+                "/steam pr <游戏名> —— 同上（简写）\n"
+                "/steam px <游戏名> —— 快捷版（直接返回第一条）\n"
+                "其他：/steam help 查看全部指令；/steam status 查接口状态"
             )
             return
-        async for result in self._steam_price(event, False, "steam"):
-            yield result
+        # 不再把任意参数当游戏名查价（避免与其他子指令串台）
+        yield event.plain_result(
+            "未识别的 /steam 子参数：" + _head + "\n"
+            "查价请使用 /price <游戏名> 或 /px <游戏名>\n"
+            "全部指令见 /steam help"
+        )
+        return
 
     async def _steam_price_cmd_impl(self, event: AstrMessageEvent, query: str):
         """价格查询（多个匹配时列出候选并等待回复序号）。纯 Steam 多区。"""

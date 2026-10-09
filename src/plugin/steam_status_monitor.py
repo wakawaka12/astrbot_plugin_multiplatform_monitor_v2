@@ -1,5 +1,5 @@
 from astrbot.api.star import Star, Context
-from ..shared.logging import logger, register_sensitive_values
+from ..shared.logging import format_exception, logger, register_sensitive_values
 from ..shared.network import (
     aclose_shared_httpx_clients,
     configure_tls,
@@ -689,7 +689,7 @@ class SteamStatusMonitorV3(
                 names = "、".join(f"{it['player_name']}:{it['game_name']}" for it in items[:5])
                 logger.info(f"[购游戏] 批量推送 {len(items)} 条 -> {umo} | {names}")
             except Exception as e:
-                logger.error(f"[购游戏] 推送失败: {e}")
+                logger.error(f"[购游戏] 推送失败: {format_exception(e)}")
 
     def _cached_persona_name(self, sid) -> str:
         sid = str(sid)
@@ -884,6 +884,97 @@ class SteamStatusMonitorV3(
 
     @filter.permission_type(filter.PermissionType.MEMBER)
     @filter.command("steam addid")
+    def _extract_at_qq_from_event(self, event) -> str:
+        """从事件消息链提取第一个被 @ 的 QQ 号。
+
+        AstrBot 有时把 at 段渲染成文本（如「昵称(QQ)」）塞进 nickname 参数，
+        导致 at_user 为空；直接读消息链里的 At 组件最可靠。
+        判断以 qq 字段为准（ComponentType 是枚举，str() 结果不可靠）。
+        """
+        try:
+            msg_obj = getattr(event, "message_obj", None)
+            segments = []
+            if msg_obj is not None:
+                segments = (getattr(msg_obj, "message", None)
+                            or getattr(msg_obj, "message_chain", None) or [])
+            _dbg = []
+            for seg in segments or []:
+                try:
+                    qq = getattr(seg, "qq", None)
+                    seg_type = getattr(seg, "type", None)
+                    type_raw = getattr(seg_type, "value", seg_type)
+                    type_l = str(type_raw or "").lower()
+                    if isinstance(seg, dict):
+                        seg_type = seg.get("type") or seg.get("msg_type") or seg_type
+                        type_l = str(getattr(seg_type, "value", seg_type) or "").lower()
+                        if qq is None:
+                            qq = seg.get("qq") or (seg.get("data") or {}).get("qq")
+                    if qq is None and "cq:at" in str(seg).lower():
+                        _m = re.search(r"qq=(\d+)", str(seg))
+                        qq = _m.group(1) if _m else None
+                    if qq is None:
+                        _dbg.append(type_l or type(seg).__name__)
+                        continue
+                    if str(qq) not in ("all", "0", ""):
+                        return str(qq)
+                except Exception:
+                    continue
+            if _dbg:
+                logger.info(f"[at] 未取到@目标，消息段类型={_dbg}")
+        except Exception:
+            pass
+        return ""
+
+    async def _resolve_qq_by_nickname(self, event, name: str) -> str:
+        """按群昵称反查 QQ（用于手打 @名字；名字含空格时 AstrBot 参数会被拆开）。
+
+        仅在唯一匹配时返回，避免误绑定。结果缓存 120 秒。
+        """
+        name = (name or "").strip().lstrip("@").strip()
+        # 去掉 AstrBot 渲染出的「昵称(QQ)」后缀
+        name = re.sub(r"\s*\(\s*\d{5,}\s*\)\s*$", "", name).strip()
+        if not name or name.isdigit() or len(name) < 2:
+            return ""
+        try:
+            gid = str(event.get_group_id() or "")
+            if not gid:
+                return ""
+            cache = getattr(self, "_nick_qq_cache", None)
+            if cache is None:
+                cache = {}
+                self._nick_qq_cache = cache
+            ck = f"{gid}:{name}"
+            hit = cache.get(ck)
+            now = time.time()
+            if hit and now - hit[0] < 120:
+                return hit[1]
+            bot = getattr(event, "bot", None)
+            if bot is None:
+                return ""
+            members = await bot.call_action("get_group_member_list", group_id=int(gid)) or []
+            exact, partial = [], []
+            for m in members:
+                try:
+                    card = str(m.get("card") or "")
+                    nick = str(m.get("nickname") or "")
+                    uid = str(m.get("user_id") or "")
+                    if not uid:
+                        continue
+                    if name == card or name == nick:
+                        exact.append(uid)
+                    elif name in card or name in nick:
+                        partial.append(uid)
+                except Exception:
+                    continue
+            pick = exact[0] if len(exact) == 1 else (partial[0] if (not exact and len(partial) == 1) else "")
+            cache[ck] = (now, pick)
+            if pick:
+                logger.info(f"[at] 昵称反查成功 name={name!r} -> {pick}")
+            return pick
+        except Exception as e:
+            logger.info(f"[at] 昵称反查失败 name={name!r}: {format_exception(e)}")
+            return ""
+
     async def steam_addid(self, event: AstrMessageEvent, steamid: str, at_user: str = "", nickname: str = ""):
         '''添加玩家到本群监控列表（分群），支持逗号分隔多个ID。
         Steam 支持 SteamID/个人资料链接/自定义ID/好友码；
@@ -896,10 +987,33 @@ class SteamStatusMonitorV3(
         # 解析 @用户 [备注名] 后缀（多参数接收，兼容 AstrBot 参数分割）
         bind_qq = None
         bind_nickname = None
+        # 优先从事件消息链取 @ 目标（at_user 常为空，at 被渲染进 nickname）
+        _at_ev = self._extract_at_qq_from_event(event)
+        if _at_ev:
+            bind_qq = _at_ev
+        # 兜底：第二个参数直接给纯数字 QQ 号（手打 @ 未生成真实 at 组件时可用）
+        if not bind_qq and at_user and str(at_user).strip().isdigit() and len(str(at_user).strip()) >= 5:
+            bind_qq = str(at_user).strip()
         if at_user:
-                        m = re.search(r'\[CQ:at,qq=(\d+)\]|\[At:(\d+)\]|@.+?\((\d+)\)|@(\d+)', at_user.strip()); bind_qq = m.group(1) or m.group(2) or m.group(3) or m.group(4) if m else None
+            _m_at = re.search(r'\[CQ:at,qq=(\d+)\]|\[At:(\d+)\]|@.+?\((\d+)\)|@(\d+)|[^\s()]{1,64}\((\d{5,})\)', at_user.strip())
+            _qq_at = (_m_at.group(1) or _m_at.group(2) or _m_at.group(3) or _m_at.group(4) or _m_at.group(5)) if _m_at else None
+            # 只有解析成功才覆盖（否则会抹掉已从事件消息链取到的 QQ）
+            if _qq_at:
+                bind_qq = _qq_at
         if nickname:
             bind_nickname = nickname.strip()
+        # 全部解析失败（手打 @名字/名字含空格被拆开）→ 按群昵称反查 QQ
+        if not bind_qq:
+            _names = [x for x in (str(at_user or "").strip(), str(nickname or "").strip()) if x]
+            for _nm in _names:
+                _qq_nick = await self._resolve_qq_by_nickname(event, _nm)
+                if _qq_nick:
+                    bind_qq = _qq_nick
+                    break
+        # 若 nickname 只是 at 的渲染文本（形如 昵称(QQ)，QQ 与本次绑定一致），视为噪声丢弃
+        if bind_nickname and bind_qq:
+            if re.fullmatch(r".{0,64}\(\s*" + re.escape(str(bind_qq)) + r"\s*\)", bind_nickname):
+                bind_nickname = None
         # 仅以中英文逗号分隔多个 ID
         import re as _re
         raw_list = [x.strip() for x in _re.split(r'[,，]+', steamid) if x.strip()]
@@ -1457,7 +1571,7 @@ class SteamStatusMonitorV3(
     @filter.permission_type(filter.PermissionType.MEMBER)
     @filter.command("px")
     async def px_short(self, event: AstrMessageEvent, query: str = ""):
-        '''价格快捷查询：/px 游戏名'''
+        '''价格快捷查询：/px 游戏名（直接返回第一条匹配）'''
         async for r in self._px_short_impl(event, query):
             yield r
 
@@ -1536,20 +1650,8 @@ class SteamStatusMonitorV3(
 
     @filter.permission_type(filter.PermissionType.MEMBER)
     @filter.command("steam")
-    async def steam_lookup(self, event: AstrMessageEvent, query: str = ""):
-        async for r in self._steam_lookup_impl(event, query):
-            yield r
-
-    @filter.permission_type(filter.PermissionType.MEMBER)
-    @filter.command("steam price")
-    async def steam_price(self, event: AstrMessageEvent, query: str):
-        async for r in self._steam_price_cmd_impl(event, query):
-            yield r
-
-    @filter.permission_type(filter.PermissionType.MEMBER)
-    @filter.command("steam px")
-    async def steam_px(self, event: AstrMessageEvent, query: str):
-        async for r in self._steam_px_impl(event, query):
+    async def steam_lookup(self, event: AstrMessageEvent, query: str = "", target: str = ""):
+        async for r in self._steam_lookup_impl(event, query, target):
             yield r
 
 
@@ -2430,8 +2532,8 @@ class SteamStatusMonitorV3(
             "Steam状态监控插件指令：\n"
             "/steam on - 启动监控\n"
             "/steam off - 停止监控\n"
-            "/steam price [游戏名或Steam链接] - 查询游戏价格、史低与地区对比\n"
-            "/steam px [游戏名] - 价格查询快捷版，直接返回第一条匹配\n"
+            "/price [游戏名或Steam链接] - 查询价格、Steam史低与地区对比\n"
+            "/px [游戏名] - 价格快捷版（直接返回第一条匹配）\n"
             "/steam list - 列出所有玩家状态\n"
             "/steam config - 查看当前配置\n"
             "/steam set [参数] [值] - 设置配置参数\n"
@@ -3283,7 +3385,16 @@ class SteamStatusMonitorV3(
         if blk:
             yield event.plain_result(blk)
             return
-        m = re.search(r'\[CQ:at,qq=(\d+)\]|\[At:(\d+)\]|@.+?\((\d+)\)|@(\d+)', qq.strip()); qq_clean = m.group(1) or m.group(2) or m.group(3) or m.group(4) if m else qq.strip().lstrip('@')
+        m = re.search(r'\[CQ:at,qq=(\d+)\]|\[At:(\d+)\]|@.+?\((\d+)\)|@(\d+)|[^\s()]{1,64}\((\d{5,})\)', qq.strip()); qq_clean = (m.group(1) or m.group(2) or m.group(3) or m.group(4) or m.group(5)) if m else qq.strip().lstrip('@')
+        # 参数里拿不到 QQ 时，从事件消息链取 @ 目标
+        if not str(qq_clean or "").strip().isdigit():
+            _at_ev2 = self._extract_at_qq_from_event(event)
+            if _at_ev2:
+                qq_clean = _at_ev2
+        if not str(qq_clean or "").strip().isdigit():
+            _qq_nick2 = await self._resolve_qq_by_nickname(event, qq)
+            if _qq_nick2:
+                qq_clean = _qq_nick2
         info = getattr(self, "_bind_data", {}).get(qq_clean)
         if not info:
             yield event.plain_result(f"QQ {qq_clean} 未绑定任何玩家，请先使用 /game steam add … @{qq_clean}")
@@ -3457,6 +3568,59 @@ class SteamStatusMonitorV3(
         self.group_achievement_enabled[group_id] = False
         self._save_group_switches()
         yield event.plain_result(f"已为本群关闭Steam成就推送。")
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("steam test_perfect")
+    async def steam_test_perfect(self, event: AstrMessageEvent, steamid: str, appid: str):
+        '''测试全成就检测与推送：/steam test_perfect <SteamID|psn:x|xbox:x> <appid>'''
+        from ..infrastructure.clients.multi import split_platform_sid
+        gid = str(event.get_group_id()) if hasattr(event, "get_group_id") else "default"
+        sp = split_platform_sid(str(steamid))
+        if sp:
+            sid = f"{sp[0]}:{sp[1]}"
+        else:
+            sid = await self.resolve_steam_input(steamid)
+            if not sid:
+                yield event.plain_result(f"无法解析 ID：{steamid}（支持 SteamID64 / 资料链接 / 好友码 / psn:x / xbox:x）")
+                return
+        aid = str(appid).strip()
+        if not aid.isdigit():
+            yield event.plain_result("appid 必须是数字，例如：/steam test_perfect 76561199415792116 730")
+            return
+        try:
+            status = await self.fetch_player_status(sid)
+            player_name = (status or {}).get("name") or self._resolve_bind_name(sid, sid)
+        except Exception:
+            player_name = self._resolve_bind_name(sid, sid)
+        try:
+            game_name = await self.get_chinese_game_name(int(aid), None) or f"appid {aid}"
+        except Exception:
+            game_name = f"appid {aid}"
+        try:
+            if sp and sp[0] == "xbox":
+                unlocked = await self.fetch_xbox_title_achievements(sp[1], aid)
+            else:
+                unlocked = await self.achievement_monitor.get_player_achievements(
+                    self.API_KEY, gid, sid, int(aid))
+            total = await self._total_achievement_count(gid, sid, aid, game_name)
+        except Exception as e:
+            yield event.plain_result(f"获取成就数据失败：{format_exception(e)}")
+            return
+        n = len(unlocked or [])
+        lines = [
+            "🧪 全成就推送 · 测试",
+            f"玩家：{player_name}（{sid}）",
+            f"游戏：{game_name}（{aid}）",
+            f"已解锁：{n}    总成就：{total}",
+            f"判定：{'✅ 已达成全成就' if (total and n >= total) else '❌ 尚未达成全成就'}",
+        ]
+        if total and n >= total:
+            ok = await self.notify_perfect_achievement(
+                gid, sid, player_name, aid, game_name, total, n, is_new=True, force=True)
+            lines.append("推送：已发送 ✅（测试模式，不写入去重记录）" if ok else "推送：失败或无有效推送会话 ❌")
+        else:
+            lines.append("提示：换一个已全成就的账号+游戏再试")
+        yield event.plain_result("\n".join(lines))
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("steam test_achievement_render")
@@ -4083,7 +4247,7 @@ class SteamStatusMonitorV3(
                     data = resp.json()
                     return data.get('response', {}).get('player_count')
         except Exception as e:
-            logger.warning(f"获取在线人数失败: {e} (gameid={gameid})")
+            logger.warning(f"获取在线人数失败: {format_exception(e)} (gameid={gameid})")
         return None
 
     @filter.permission_type(filter.PermissionType.MEMBER)

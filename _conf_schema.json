@@ -55,7 +55,16 @@
     "description": "价格查询地区代码",
     "type": "string",
     "hint": "选择用于查询价格的 Steam 区",
-    "options": ["CN", "US", "JP", "KR", "RU", "UA", "TR", "HK"],
+    "options": [
+      "CN",
+      "US",
+      "JP",
+      "KR",
+      "RU",
+      "UA",
+      "TR",
+      "HK"
+    ],
     "default": "CN"
   },
   "price_compare_regions": {
@@ -184,6 +193,16 @@
     "hint": "可填写反向代理地址，例如 https://steamgriddb.4oi.site；留空使用官方地址",
     "default": ""
   },
+  "translate_api_base": {
+    "description": "游戏名翻译中转站地址（可选；留空则跳过中转站翻译，仅用 AstrBot provider）",
+    "type": "string",
+    "default": ""
+  },
+  "translate_api_key": {
+    "description": "游戏名翻译中转站密钥（可选；与会话密钥分开存放，切勿硬编码进源码）",
+    "type": "string",
+    "default": ""
+  },
   "qq_official_enabled": {
     "description": "启用后台 QQ 官方机器人配置",
     "type": "bool",
@@ -211,7 +230,10 @@
   "qq_official_message_format": {
     "description": "QQ 官方机器人消息格式",
     "type": "string",
-    "options": ["plain", "markdown"],
+    "options": [
+      "plain",
+      "markdown"
+    ],
     "hint": "plain 为纯文本，markdown 为 Markdown 消息。",
     "default": "plain"
   },
@@ -224,28 +246,50 @@
   "qq_menu_scope": {
     "description": "QQ 指令面板场景",
     "type": "string",
-    "options": ["group", "c2c"],
+    "options": [
+      "group",
+      "c2c"
+    ],
     "hint": "group 为群聊，c2c 为单聊；修改场景后请先删除旧面板再同步",
     "default": "group"
   },
   "qq_menu_group_openids": {
     "description": "QQ 指令面板群 OpenID",
     "type": "list",
-    "items": {"type": "string"},
+    "items": {
+      "type": "string"
+    },
     "hint": "群聊面板必填，填写 QQ 开放平台中的群 OpenID，可配置多个群",
     "default": []
   },
   "qq_menu_commands": {
     "description": "QQ 指令面板展示项",
     "type": "list",
-    "items": {"type": "object"},
+    "items": {
+      "type": "object"
+    },
     "hint": "由插件后台页面维护，控制指令名称、说明与显示顺序",
     "default": [
-      {"command": "/steam help", "description": "查看 Steam 插件指令帮助"},
-      {"command": "/steam list", "description": "查看本群玩家当前状态"},
-      {"command": "/steam rank", "description": "查看本群今日时长排行"},
-      {"command": "/steam rank 7", "description": "查看本群最近七天排行"},
-      {"command": "/steam rank 30", "description": "查看本群最近三十天排行"}
+      {
+        "command": "/steam help",
+        "description": "查看 Steam 插件指令帮助"
+      },
+      {
+        "command": "/steam list",
+        "description": "查看本群玩家当前状态"
+      },
+      {
+        "command": "/steam rank",
+        "description": "查看本群今日时长排行"
+      },
+      {
+        "command": "/steam rank 7",
+        "description": "查看本群最近七天排行"
+      },
+      {
+        "command": "/steam rank 30",
+        "description": "查看本群最近三十天排行"
+      }
     ]
   },
   "qq_menu_panel_id": {
@@ -289,7 +333,11 @@
     "type": "string",
     "hint": "全部游戏=监控所有；白名单=仅播报列表中的游戏；黑名单=列表中的游戏不播报",
     "default": "全部游戏",
-    "enum": ["全部游戏", "白名单", "黑名单"]
+    "enum": [
+      "全部游戏",
+      "白名单",
+      "黑名单"
+    ]
   },
   "game_filter_ids": {
     "description": "过滤游戏ID列表 -修改后重启AstrBot生效",
@@ -352,16 +400,16 @@
     "default": 24
   },
   "wish_sale_auto_pull_wishlist": {
-    "description": "是否后台自动拉愿望单列表",
+    "description": "是否夜间自动拉愿望单列表",
     "type": "bool",
-    "hint": "false=手动 /game wish_sale update（推荐，避免每天 SSR 全员）",
-    "default": false
+    "hint": "true=每天凌晨按 night_hour SSR 拉列表；白天不拉",
+    "default": true
   },
   "wish_sale_auto_discount": {
-    "description": "是否后台自动查愿望单折扣",
+    "description": "白天是否后台扫商店折扣",
     "type": "bool",
-    "hint": "true=按本地缓存+小时限额自动扫；false=只手动 check",
-    "default": true
+    "hint": "主力在夜间ITAD；白天建议 false，需要时用 check @某人（ITAD）",
+    "default": false
   },
   "wish_sale_hourly_limit": {
     "description": "愿望单折扣·后台每小时商店查询上限",
@@ -422,18 +470,6 @@
     "type": "float",
     "hint": "愿望单用 ITAD 判折扣时的间隔，默认0.35",
     "default": 0.35
-  },
-  "wish_sale_auto_pull_wishlist": {
-    "description": "是否夜间自动拉愿望单列表",
-    "type": "bool",
-    "hint": "true=每天凌晨按 night_hour SSR 拉列表；白天不拉",
-    "default": true
-  },
-  "wish_sale_auto_discount": {
-    "description": "白天是否后台扫商店折扣",
-    "type": "bool",
-    "hint": "主力在夜间ITAD；白天建议 false，需要时用 check @某人（ITAD）",
-    "default": false
   },
   "wish_sale_ban_cooldown_min": {
     "description": "愿望单403冷却时间（分钟）",

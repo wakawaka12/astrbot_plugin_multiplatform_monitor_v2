@@ -880,10 +880,13 @@ class ITADClient:
             if steam_history_low is None or amount < steam_history_low:
                 steam_history_low = amount
                 steam_history_low_currency = cur_h
-        # Steam 店史低取「Steam 历史价」与「deal.storeLow」中更合理者：优先显式历史价
-        if steam_history_low is None:
-            steam_history_low = steam_store_low
-            steam_history_low_currency = steam_store_low_currency
+        # Steam 店史低：取「history/v2 的 Steam 历史价」与「deal.storeLow」中更低者。
+        # 实测 history/v2 对部分区记录不全（会高于 storeLow 甚至高于现价），
+        # 而 storeLow 是 ITAD 官方给出的该商店历史最低，故两者取 min 最稳。
+        if steam_store_low is not None:
+            if steam_history_low is None or steam_store_low < steam_history_low:
+                steam_history_low = steam_store_low
+                steam_history_low_currency = steam_store_low_currency
         history_low = None
         history_low_currency = None
         low_obj = current.get("historyLow") if isinstance(current, dict) else None

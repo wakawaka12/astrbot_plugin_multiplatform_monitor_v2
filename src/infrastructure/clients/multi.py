@@ -566,7 +566,12 @@ class MultiPlatformClientMixin:
         try:
             client = await self._ensure_xbox_client()
         except Exception as e:
-            logger.error(f"[Xbox] 初始化失败: {e}")
+            msg = str(e)
+            # 冷却中属预期状态（token 过期后 30 分钟内），降级 debug 避免每轮 ERROR 刷屏
+            if "冷却中" in msg or "暂时不可用" in msg:
+                logger.debug(f"[Xbox] 初始化跳过（冷却中）: {msg}")
+            else:
+                logger.warning(f"[Xbox] 初始化失败: {msg}")
             return {}
         logger.info(f"[Xbox] 开始拉取 {ids}")
         result: Dict[str, Dict[str, Any]] = {}

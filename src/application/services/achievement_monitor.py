@@ -66,52 +66,79 @@ class AchievementMonitor:
             print(f"保存成就缓存失败: {e}")
     
     async def get_player_achievements(self, api_key: str, group_id: str, steamid: str, appid: int) -> Optional[Set[str]]:
+        """获取玩家在某游戏的已解锁成就 apiname 集合（多语言 + 重试）。
+
+        判定原则（修复误拉黑）：
+        - 拿到 achievements 列表就返回（即使 description 全空，很多游戏本就无描述）
+        - 仅当 API 明确表示「该游戏没有成就」才加入黑名单
+        - 网络/HTTP 失败、隐私(401/403) 一律不拉黑，只返回 None 交给下一轮
         """
-        获取指定玩家在指定游戏中的已解锁成就 apiname 集合，失败自动尝试多语言（中文、英文），每种语言最多重试3次
-        """
-        # 黑名单机制
         if hasattr(self, 'achievement_blacklist') and str(appid) in self.achievement_blacklist:
             return None
         url = f"{self.steam_api_base}/ISteamUserStats/GetPlayerAchievements/v1/"
         lang_list = ["schinese", "english", "en"]
-        all_failed = True
+        best_unlocked = None
+        no_achievement = False
+        privacy_blocked = False
+        http_failures = 0
         for lang in lang_list:
-            params = {
-                "key": api_key,
-                "steamid": steamid,
-                "appid": appid,
-                "l": lang
-            }
+            done_lang = False
             for attempt in range(3):
                 try:
                     async with shared_httpx_client(proxy=self.proxy, timeout=15, follow_redirects=False) as client:
-                        response = await client.get(url, params=params)
-                        if response.status_code == 200:
-                            data = response.json()
-                            if "playerstats" in data and "achievements" in data["playerstats"]:
-                                achievements = data["playerstats"]["achievements"]
-                                unlocked = {
-                                    ach["apiname"] for ach in achievements 
-                                    if ach.get("achieved", 0) == 1
-                                }
-                                # 检查是否有描述字段且不全为空
-                                has_desc = any(ach.get("description") for ach in achievements)
-                                if has_desc:
-                                    all_failed = False
-                                    return unlocked
-                                # 否则继续尝试下一个语言
-                        elif response.status_code == 401:
-                            print(f"无权限获取玩家 {steamid} 的游戏 {appid} 成就数据 (隐私设置)")
-                            return None
-                        else:
-                            print(f"获取成就数据失败: HTTP {response.status_code} (第{attempt+1}次, lang={lang})")
+                        response = await client.get(url, params={
+                            "key": api_key, "steamid": steamid, "appid": appid, "l": lang,
+                        })
+                    if response.status_code == 200:
+                        data = response.json() or {}
+                        ps = data.get("playerstats") or {}
+                        if "achievements" in ps:
+                            achievements = ps.get("achievements") or []
+                            if not achievements:
+                                no_achievement = True
+                                done_lang = True
+                                break
+                            unlocked = {a.get("apiname") for a in achievements if a.get("achieved", 0) == 1}
+                            unlocked.discard(None)
+                            if any(a.get("description") for a in achievements):
+                                return unlocked
+                            if best_unlocked is None:
+                                best_unlocked = unlocked
+                            done_lang = True
+                            break
+                        if ps:
+                            no_achievement = True
+                            done_lang = True
+                            break
+                    elif response.status_code in (401, 403):
+                        logger.info(f"[成就] 玩家 {steamid} 的游戏 {appid} 无权限（隐私设置），跳过")
+                        privacy_blocked = True
+                        done_lang = True
+                        break
+                    else:
+                        http_failures += 1
+                        _body = ""
+                        try:
+                            _body = (await response.aread())[:120].decode("utf-8", "ignore")
+                        except Exception:
+                            pass
+                        logger.info(f"[成就] HTTP {response.status_code} (第{attempt+1}次 lang={lang} appid={appid}) body={_body!r}")
                 except Exception as e:
-                    print(f"请求异常: {e} (第{attempt+1}次, lang={lang})")
-        # 如果全部失败，加入黑名单
-        if all_failed:
-            print(f"游戏 {appid} 已加入成就黑名单（无成就或API异常）")
+                    http_failures += 1
+                    logger.debug(f"[成就] 请求异常 (第{attempt+1}次 lang={lang} appid={appid}): {format_exception(e)}")
+            if done_lang and (no_achievement or privacy_blocked):
+                break
+        if best_unlocked is not None:
+            return best_unlocked
+        if no_achievement:
+            logger.info(f"[成就黑名单] 游戏 {appid} API 确认无成就，加入黑名单")
             self.achievement_blacklist.add(str(appid))
             self._save_blacklist()
+            return None
+        if privacy_blocked:
+            return None
+        logger.info(f"[成就] appid={appid} steamid={steamid} 本轮请求全部失败({http_failures}次)，"
+                    f"privacy={privacy_blocked} no_achievement={no_achievement}，不拉黑，等待下轮")
         return None
 
     async def get_achievement_details(self, group_id: str, appid: int, lang: str = "schinese", api_key: str = "", steamid: str = "") -> Dict[str, Any]:

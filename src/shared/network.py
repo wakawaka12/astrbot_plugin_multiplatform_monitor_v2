@@ -163,7 +163,7 @@ async def get_status_httpx_client(proxy=None) -> httpx.AsyncClient:
         max_keepalive_connections=max(8, _STATUS_POOL_MAX // 2),
         keepalive_expiry=60.0,
     )
-    timeout = httpx.Timeout(20.0, connect=8.0)
+    timeout = httpx.Timeout(30.0, connect=15.0)
     client = httpx.AsyncClient(timeout=timeout, limits=limits, **kwargs)
     old = _status_clients.get(key)
     _status_clients[key] = client
@@ -257,7 +257,7 @@ async def get_shared_httpx_client(proxy=None) -> httpx.AsyncClient:
         max_keepalive_connections=40,
         keepalive_expiry=60.0,
     )
-    timeout = httpx.Timeout(20.0, connect=8.0)
+    timeout = httpx.Timeout(30.0, connect=15.0)
     client = httpx.AsyncClient(timeout=timeout, limits=limits, **kwargs)
     old = _shared_clients.get(key)
     _shared_clients[key] = client

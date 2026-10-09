@@ -486,7 +486,8 @@ class SteamClientMixin:
             f"?key={self.API_KEY}&steamid={steam_id}&include_appinfo=1&format=json"
         )
         try:
-            async with shared_httpx_client(proxy=self.proxy, timeout=20, follow_redirects=False) as client:
+            # GetOwnedGames 响应可达 MB 级（数千款游戏），经代理 20s 易 PoolTimeout -> 放宽到 60s
+            async with shared_httpx_client(proxy=self.proxy, timeout=60, follow_redirects=False) as client:
                 response = await client.get(url)
                 response.raise_for_status()
                 data = response.json().get("response", {})
@@ -928,7 +929,9 @@ class SteamClientMixin:
         """
         px = getattr(self, "proxy", None) or None
         if px:
-            return [px, None]
+            # 实测 2026-10-09：Steam 直连已被限流（首次成功后连续超时），
+            # 代理是唯一可靠通道 → 代理优先并重试一次，最后才回落直连兜底
+            return [px, px, None]
         return [None]
 
     async def _status_get_json(self, url, timeout=15):
@@ -1176,7 +1179,7 @@ class SteamClientMixin:
         language = language or "all"
         params["language"] = language
         try:
-            async with shared_httpx_client(proxy=self.proxy, timeout=15, follow_redirects=False) as client:
+            async with shared_httpx_client(proxy=None, timeout=15, follow_redirects=False) as client:
                 response = await client.get(url, params=params)
                 response.raise_for_status()
                 payload = response.json()
@@ -1224,14 +1227,14 @@ class SteamClientMixin:
             return None
         url = f"{self.STEAM_STORE_BASE}/api/appdetails?appids={gid}&l={language}&cc=cn"
         try:
-            async with shared_httpx_client(proxy=self.proxy, timeout=15, follow_redirects=False) as client:
+            async with shared_httpx_client(proxy=None, timeout=15, follow_redirects=False) as client:
                 response = await client.get(url)
                 note_steam_store_status(response.status_code, label=f"details {gid}")
                 response.raise_for_status()
                 payload = response.json().get(gid, {})
                 return payload.get("data") if payload.get("success") else None
         except Exception as exc:
-            logger.warning(f"获取 Steam 游戏详情失败: {exc} (appid={gid})")
+            logger.warning(f"获取 Steam 游戏详情失败: {format_exception(exc)} (appid={gid})")
             return None
 
     async def fetch_app_meta(self, appid, country="CN"):
@@ -1243,7 +1246,7 @@ class SteamClientMixin:
             return None
         url = f"{self.STEAM_STORE_BASE}/api/appdetails?appids={gid}&cc={str(country).lower()}&l=schinese"
         try:
-            async with shared_httpx_client(proxy=self.proxy, timeout=12, follow_redirects=False) as client:
+            async with shared_httpx_client(proxy=None, timeout=12, follow_redirects=False) as client:
                 response = await client.get(url)
                 note_steam_store_status(response.status_code, label=f"meta {gid}")
                 response.raise_for_status()
@@ -1367,7 +1370,7 @@ class SteamClientMixin:
             return None
         url = f"{self.STEAM_STORE_BASE}/api/appdetails?appids={gid}&cc={str(country).lower()}"
         try:
-            async with shared_httpx_client(proxy=self.proxy, timeout=15, follow_redirects=False) as client:
+            async with shared_httpx_client(proxy=None, timeout=15, follow_redirects=False) as client:
                 response = await client.get(url)
                 note_steam_store_status(response.status_code, label=f"region_price {gid}/{country}")
                 response.raise_for_status()
@@ -1401,7 +1404,7 @@ class SteamClientMixin:
             return None
         url = f"{self.STEAM_STORE_BASE}/api/packagedetails?packageids={pid}&cc={str(country).lower()}"
         try:
-            async with shared_httpx_client(proxy=self.proxy, timeout=12, follow_redirects=False) as client:
+            async with shared_httpx_client(proxy=None, timeout=12, follow_redirects=False) as client:
                 resp = await client.get(url)
                 resp.raise_for_status()
                 payload = resp.json().get(pid, {})
@@ -1418,7 +1421,7 @@ class SteamClientMixin:
                     "country": str(country).upper(),
                 }
         except Exception as exc:
-            logger.warning(f"获取 Steam package 详情失败: {exc} (pid={pid})")
+            logger.warning(f"获取 Steam package 详情失败: {format_exception(exc)} (pid={pid})")
             return None
 
     async def fetch_package_price(self, packageid, country="CN"):
@@ -1459,7 +1462,7 @@ class SteamClientMixin:
             return []
         url = f"{self.STEAM_STORE_BASE}/api/appdetails?appids={gid}&cc={str(country).lower()}&l=schinese"
         try:
-            async with shared_httpx_client(proxy=self.proxy, timeout=15, follow_redirects=False) as client:
+            async with shared_httpx_client(proxy=None, timeout=15, follow_redirects=False) as client:
                 response = await client.get(url)
                 response.raise_for_status()
                 payload = response.json().get(gid, {})
@@ -1530,7 +1533,7 @@ class SteamClientMixin:
                         e["currency"] = cur
                 return ordered
         except Exception as exc:
-            logger.warning(f"获取 Steam 版本套餐价失败: {exc} (appid={gid})")
+            logger.warning(f"获取 Steam 版本套餐价失败: {format_exception(exc)} (appid={gid})")
             return []
 
     async def fetch_edition_prices_multi(self, appid, countries):
@@ -1600,7 +1603,7 @@ class SteamClientMixin:
         url_zh = f"{self.STEAM_STORE_BASE}/api/appdetails?appids={gid}&l=schinese"
         url_en = f"{self.STEAM_STORE_BASE}/api/appdetails?appids={gid}&l=en"
         try:
-            async with shared_httpx_client(proxy=self.proxy, timeout=10, follow_redirects=False) as client:
+            async with shared_httpx_client(proxy=None, timeout=10, follow_redirects=False) as client:
                 # 查中文名
                 resp_zh = await client.get(url_zh)
                 data_zh = resp_zh.json()
@@ -1639,7 +1642,7 @@ class SteamClientMixin:
         url_en = f"{self.STEAM_STORE_BASE}/api/appdetails?appids={gid}&l=en"
         name_zh = name_en = fallback_name or "未知游戏"
         try:
-            async with shared_httpx_client(proxy=self.proxy, timeout=10, follow_redirects=False) as client:
+            async with shared_httpx_client(proxy=None, timeout=10, follow_redirects=False) as client:
                 resp_zh = await client.get(url_zh)
                 data_zh = resp_zh.json()
                 info_zh = data_zh.get(gid, {}).get("data", {})
