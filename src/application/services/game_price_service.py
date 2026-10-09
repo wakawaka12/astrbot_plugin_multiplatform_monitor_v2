@@ -405,6 +405,10 @@ class GamePriceServiceMixin:
             logger.warning("LLM 翻译游戏名失败，尝试中转站: %s", exc)
             return query
 
+
+    def _has_cjk_text(self, s: str) -> bool:
+        return any("一" <= ch <= "鿿" for ch in str(s or ""))
+
     async def _format_game_search_item(self, game):
         """返回候选展示名 + DLC/版本标签。
 
