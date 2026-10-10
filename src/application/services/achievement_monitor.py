@@ -9,7 +9,7 @@ from typing import Set, Optional, Dict, Any
 
 from ...shared.fonts import load_truetype
 from ...shared.paths import IMAGES_DIR
-from ...shared.logging import logger
+from ...shared.logging import format_exception, logger
 from ...shared.network import aiohttp_connector, httpx_client_kwargs, shared_httpx_client
 
 
